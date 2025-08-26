@@ -1,23 +1,168 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Clicker</title>
   <style>
-    body { text-align: center; font-family: Arial; margin-top: 50px; }
-    button { font-size: 24px; padding: 20px 40px; }
-    h1 { font-size: 48px; }
+    :root {
+      --bg: #0f172a; /* slate-900 */
+      --card: #111827; /* gray-900 */
+      --text: #e5e7eb; /* gray-200 */
+      --muted: #9ca3af; /* gray-400 */
+      --accent: #22c55e; /* green-500 */
+      --danger: #ef4444; /* red-500 */
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: var(--text);
+      background: radial-gradient(1200px 800px at 50% -200px, #1f2937, var(--bg));
+      display: grid;
+      place-items: center;
+    }
+    .app {
+      width: min(92vw, 540px);
+      padding: 20px 16px 28px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    }
+    h1 {
+      margin: 10px 0 4px;
+      font-size: clamp(40px, 12vw, 72px);
+      text-align: center;
+      letter-spacing: 1px;
+    }
+    .subtitle { text-align:center; color: var(--muted); margin-bottom: 14px; font-size: 14px; }
+    .buttons {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin: 16px 0 8px;
+    }
+    button {
+      width: 100%;
+      border: none;
+      border-radius: 16px;
+      padding: clamp(16px, 4.5vh, 26px);
+      font-size: clamp(20px, 6vw, 28px);
+      font-weight: 700;
+      color: #0b0f17;
+      background: white;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+      transition: transform .04s ease, filter .2s ease;
+    }
+    button:active { transform: translateY(1px) scale(0.995); }
+    .primary { background: linear-gradient(180deg, #34d399, #22c55e); }
+    .secondary { background: linear-gradient(180deg, #d1d5db, #c7ccd1); }
+    .danger { background: linear-gradient(180deg, #fca5a5, #ef4444); color: white; }
+
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    .history {
+      margin-top: 14px; padding-top: 12px; border-top: 1px dashed rgba(255,255,255,0.12);
+    }
+    details { background: rgba(255,255,255,0.02); border-radius: 12px; padding: 10px 12px; }
+    summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+    ul { margin: 8px 0 0; padding: 0 0 0 18px; max-height: 30vh; overflow: auto; }
+    li { margin: 6px 0; color: var(--muted); font-size: 14px; }
+
+    .footer { margin-top: 12px; text-align: center; color: var(--muted); font-size: 12px; }
   </style>
 </head>
 <body>
-  <h1 id="count">0</h1>
-  <button onclick="increment()">Click Me!</button>
+  <main class="app" role="main">
+    <div class="subtitle">Persistent clicker (saves to your browser)</div>
+    <h1 id="count" aria-live="polite">0</h1>
+
+    <div class="buttons">
+      <button class="primary" id="btnInc" aria-label="Increase count">Tap +1</button>
+      <div class="row">
+        <button class="secondary" id="btnDec" aria-label="Decrease count">−1</button>
+        <button class="danger" id="btnReset" aria-label="Reset counter">Reset</button>
+      </div>
+    </div>
+
+    <section class="history">
+      <details>
+        <summary>History (last 20 taps)</summary>
+        <ul id="historyList"></ul>
+      </details>
+    </section>
+
+    <div class="footer">Tip: Add to your phone's home screen for quick access.</div>
+  </main>
 
   <script>
-    let count = 0;
-    function increment() {
-      count++;
-      document.getElementById("count").innerText = count;
+    // --- Storage helpers ---
+    const KEY = 'clicker.v1';
+    function load() {
+      try { return JSON.parse(localStorage.getItem(KEY)) || { count: 0, taps: [] }; }
+      catch { return { count: 0, taps: [] }; }
     }
+    function save(state) {
+      localStorage.setItem(KEY, JSON.stringify(state));
+    }
+
+    // --- State ---
+    let state = load();
+
+    // --- Rendering ---
+    const elCount = document.getElementById('count');
+    const elHist = document.getElementById('historyList');
+
+    function render() {
+      elCount.textContent = state.count;
+      // Render last 20 taps newest first
+      elHist.innerHTML = state.taps.slice(-20).reverse().map(ts => `<li>${formatTime(ts)}</li>`).join('');
+    }
+
+    function formatTime(ts) {
+      const d = new Date(ts);
+      const now = new Date();
+      const sameDay = d.toDateString() === now.toDateString();
+      const optsTime = { hour: '2-digit', minute: '2-digit' };
+      if (sameDay) return `Today ${d.toLocaleTimeString([], optsTime)}`;
+      const opts = { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' };
+      return d.toLocaleString([], opts);
+    }
+
+    // --- Actions ---
+    function tap(delta) {
+      state.count = Math.max(0, (state.count || 0) + delta);
+      if (delta > 0) state.taps.push(Date.now());
+      if (state.taps.length > 500) state.taps = state.taps.slice(-500); // cap size
+      save(state); render();
+    }
+
+    function reset() {
+      if (!confirm('Reset counter and clear history?')) return;
+      state = { count: 0, taps: [] };
+      save(state); render();
+    }
+
+    // --- Wire up buttons ---
+    document.getElementById('btnInc').addEventListener('click', () => tap(1), { passive: true });
+    document.getElementById('btnDec').addEventListener('click', () => tap(-1), { passive: true });
+    document.getElementById('btnReset').addEventListener('click', reset, { passive: true });
+
+    // Prevent iOS double-tap zoom on buttons
+    let lastTouch = 0;
+    document.addEventListener('touchend', (e) => {
+      const now = Date.now();
+      if (now - lastTouch <= 300) e.preventDefault();
+      lastTouch = now;
+    }, { passive: false });
+
+    // Initial paint
+    render();
   </script>
 </body>
 </html>
